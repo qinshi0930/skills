@@ -4,12 +4,6 @@
 
 这是我自用的 skills 工具仓库，用于日常的 agent 工作流。
 
-## 来源
-
-- https://github.com/mattpocock/skills
-- https://github.com/obra/superpowers/tree/main/skills
-- 未在上述两个来源中找到的 skill 统一标注为 https://skills.sh/。
-
 ## 技能目录
 
 ### Git 与提交工具
