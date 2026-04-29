@@ -1,0 +1,11 @@
+# git-pre-push 白名单：命中以下路径的改动不计入 spec 阈值核算
+# 可按团队需要扩展
+paths:
+  - "**/*.md"
+  - "docs/**"
+  - "specs/**"
+  - ".specs/**"
+  - ".githooks/**"
+  - ".gitignore"
+  - "CHANGELOG.md"
+  - "LICENSE"

@@ -1,0 +1,3 @@
+# git-pre-push 受保护分支：支持 <prefix>/* 通配
+# 默认（已内置，无需重复）：main master develop release/* prod production
+# 以下为项目追加项，每行一条
