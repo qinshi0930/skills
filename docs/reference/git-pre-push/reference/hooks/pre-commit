@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# pre-commit 入口：加载 lib 后执行主分支保护判定
+# 本脚本仅做硬拦截（确定性规则），语义审查由 AI 层负责。
+
+set -eu
+
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LIB_DIR="$SKILL_DIR/scripts/lib"
+
+# shellcheck source=../scripts/lib/detect-branch.sh
+. "$LIB_DIR/detect-branch.sh"
+# shellcheck source=../scripts/lib/detect-spec.sh
+. "$LIB_DIR/detect-spec.sh"
+# shellcheck source=../scripts/lib/diff-size.sh
+. "$LIB_DIR/diff-size.sh"
+# shellcheck source=../scripts/lib/exemptions.sh
+. "$LIB_DIR/exemptions.sh"
+
+current_branch="$(gpp_current_branch)"
+
+# 1. 白名单优先：若本次 staged diff 全部命中白名单 → 放行
+if gpp_all_staged_exempted; then
+  exit 0
+fi
+
+# 2. Skip-SDD trailer：最近一次准备提交的 message 含 Skip-SDD 则放行
+#    pre-commit 阶段拿不到 message，改由 commit-msg hook 处理；此处不拦。
+
+# 3. 判定是否受保护分支
+if gpp_is_protected_branch "$current_branch"; then
+  cat <<EOF >&2
+[阻止] 当前位于受保护分支 '$current_branch'，不允许直接 commit。
+请通过 AI 完成此操作（在对话中说明变更意图，技能会自动审查并创建 feature 分支），
+或手动执行：
+    git checkout -b <type>/<scope>-<slug>
+
+若本次改动属于紧急放行，请在 commit message 末尾追加 trailer：
+    Skip-SDD: <中文理由>
+EOF
+  exit 1
+fi
+
+# 4. feature 分支：若存在对应 spec，做一致性提示（非阻断）
+spec_file="$(gpp_find_spec_for_branch "$current_branch" || true)"
+if [ -n "$spec_file" ]; then
+  if ! gpp_diff_covered_by_spec "$spec_file"; then
+    echo "[提示] 当前 diff 涉及的文件未全部落入 $spec_file 的『变更范围』段，请考虑拆分 PR 或更新 spec。" >&2
+  fi
+fi
+
+exit 0

@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# pre-push 入口：受保护分支拦截 + 累计 diff 超阈值 spec 存在性硬检查。
+# 参数由 git 传入：<remote-name> <remote-url>
+# stdin 行格式：<local-ref> <local-sha> <remote-ref> <remote-sha>
+
+set -eu
+
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LIB_DIR="$SKILL_DIR/scripts/lib"
+
+# shellcheck source=../scripts/lib/detect-branch.sh
+. "$LIB_DIR/detect-branch.sh"
+# shellcheck source=../scripts/lib/detect-spec.sh
+. "$LIB_DIR/detect-spec.sh"
+# shellcheck source=../scripts/lib/diff-size.sh
+. "$LIB_DIR/diff-size.sh"
+# shellcheck source=../scripts/lib/exemptions.sh
+. "$LIB_DIR/exemptions.sh"
+
+remote_name="${1:-origin}"
+
+default_branch="$(gpp_default_branch "$remote_name")"
+protected_blocked=0
+spec_blocked=0
+
+ZERO_SHA="0000000000000000000000000000000000000000"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "$local_ref" ] && continue
+
+  # 删除远端分支（local_sha 全零）：不做 SDD 检查，仅保留受保护分支别删的拦截
+  if [ "$local_sha" = "$ZERO_SHA" ]; then
+    target_branch="${remote_ref#refs/heads/}"
+    if gpp_is_protected_branch "$target_branch"; then
+      echo "[阻止] 禁止删除远端受保护分支 '$target_branch'。" >&2
+      protected_blocked=1
+    fi
+    continue
+  fi
+
+  branch_name="${local_ref#refs/heads/}"
+
+  # 1. 受保护分支直推拦截
+  if gpp_is_protected_branch "$branch_name"; then
+    cat <<EOF >&2
+[阻止] 检测到向受保护分支 '$branch_name' 的直接推送。
+请改走 feature 分支 + Pull Request 流程：
+    git checkout -b <type>/<scope>-<slug>
+    git push --set-upstream origin <new-branch>
+然后通过 gh / glab 或网页创建 PR。
+EOF
+    protected_blocked=1
+    continue
+  fi
+
+  # 2. Skip-SDD trailer：最近一次 commit 含 trailer → 跳过 spec 检查
+  if gpp_has_skip_trailer "$local_sha"; then
+    echo "[提示] 分支 '$branch_name' 最新提交含 Skip-SDD trailer，已跳过 SDD 检查。" >&2
+    continue
+  fi
+
+  # 3. 累计 diff 核算（扣除白名单）
+  # base 选取优先级：远端默认分支 → 本地默认分支 → 本地任意默认分支（main/master/develop）的首个匹配
+  base_sha="$(git merge-base "$local_sha" "$remote_name/$default_branch" 2>/dev/null || echo "")"
+  if [ -z "$base_sha" ]; then
+    base_sha="$(git merge-base "$local_sha" "$default_branch" 2>/dev/null || echo "")"
+  fi
+  if [ -z "$base_sha" ]; then
+    for fallback in main master develop; do
+      [ "$fallback" = "$branch_name" ] && continue
+      base_sha="$(git merge-base "$local_sha" "$fallback" 2>/dev/null || echo "")"
+      [ -n "$base_sha" ] && break
+    done
+  fi
+  if [ -z "$base_sha" ]; then
+    echo "[阻止] 分支 '$branch_name' 无法定位与默认分支的共同祖先，拒绝推送以防误放行。" >&2
+    echo "       请确认本地存在 main/master/develop 或远端已有默认分支；或追加 Skip-SDD trailer。" >&2
+    spec_blocked=1
+    continue
+  fi
+
+  if gpp_diff_exceeds_threshold "$base_sha" "$local_sha"; then
+    spec_file="$(gpp_find_spec_for_branch "$branch_name" || true)"
+    if [ -z "$spec_file" ]; then
+      stats="$(gpp_diff_stats "$base_sha" "$local_sha")"
+      cat <<EOF >&2
+[阻止] 分支 '$branch_name' 累计变更已超阈值（$stats），但未找到对应的 spec 文件。
+期望路径之一：specs/<slug>.md、docs/specs/<slug>.md、.specs/<slug>.md
+其中 <slug> 与分支名 '<type>/<slug>' 的 slug 部分一致。
+
+请通过 AI 起草迷你 spec（意图 / 范围 / 验收点），或在最近 commit 追加 trailer：
+    Skip-SDD: <中文理由>
+EOF
+      spec_blocked=1
+    fi
+  fi
+done
+
+if [ "$protected_blocked" = "1" ] || [ "$spec_blocked" = "1" ]; then
+  exit 1
+fi
+
+exit 0
