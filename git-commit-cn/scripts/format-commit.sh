@@ -1,6 +1,7 @@
 #!/bin/bash
 # 自动格式化提交信息为中文规范
 # 用法: ./format-commit.sh "原始提交信息"
+# 依赖: GNU grep（需支持 -P PCRE）；macOS BSD grep 需先安装 coreutils/grep 并用 ggrep 调用
 
 set -e
 
@@ -23,7 +24,7 @@ infer_type() {
         echo "fix"
     elif echo "$input_lower" | grep -qE '(perf|优化|提升|性能|optimize|performance|improve)'; then
         echo "perf"
-    elif echo "$input_lower" | grep -qE '(refactor|重构|重构|restructure)'; then
+    elif echo "$input_lower" | grep -qE '(refactor|重构|restructure)'; then
         echo "refactor"
     elif echo "$input_lower" | grep -qE '(docs|doc|文档|readme|documentation)'; then
         echo "docs"

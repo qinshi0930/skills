@@ -205,6 +205,8 @@ bash ~/.qoder/skills/git-commit-cn/scripts/validate-commit.sh "feat(auth): 新�
 bash ~/.qoder/skills/git-commit-cn/scripts/format-commit.sh "fix login bug"
 ```
 
+> 运行环境提示：两个脚本依赖 GNU grep 的 `-P`（PCRE）选项。Linux 默认可用；macOS 默认的 BSD grep 不支持，请先 `brew install grep`，并以 `ggrep` 调用（或将 `/usr/local/opt/grep/libexec/gnubin` 加入 PATH）。
+
 ## 工作流程
 
 ### 生成 Commit Message

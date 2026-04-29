@@ -1,6 +1,7 @@
 #!/bin/bash
 # 验证 Git 提交信息是否符合中文规范
 # 用法: ./validate-commit.sh "提交信息"
+# 依赖: GNU grep（需支持 -P PCRE）；macOS BSD grep 需先安装 coreutils/grep 并用 ggrep 调用
 
 set -e
 
@@ -13,7 +14,8 @@ if [ -z "$COMMIT_MSG" ]; then
 fi
 
 # 验证格式: <type>(<scope>): <中文描述> 或 <type>: <中文描述>
-if echo "$COMMIT_MSG" | grep -qP '^(feat|fix|docs|style|refactor|test|chore|perf|build|ci|revert)(\([a-z0-9-]+\))?: .+[\x{4e00}-\x{9fff}].+$'; then
+# 描述部分只要求包含至少 1 个中文字符，不限定中文字符位于首尾或中间
+if echo "$COMMIT_MSG" | grep -qP '^(feat|fix|docs|style|refactor|test|chore|perf|build|ci|revert)(\([a-z0-9-]+\))?: .*[\x{4e00}-\x{9fff}].*$'; then
     echo "✅ 提交信息格式正确"
     echo ""
     echo "📋 解析结果:"
